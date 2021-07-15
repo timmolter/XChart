@@ -1,20 +1,35 @@
 package org.knowm.xchart.regressiontests;
 
+import com.github.romankh3.image.comparison.ImageComparison;
+import com.github.romankh3.image.comparison.model.ImageComparisonState;
 import java.awt.*;
-import java.io.ByteArrayOutputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.DigestOutputStream;
-import java.security.MessageDigest;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
 import org.junit.Assert;
 import org.junit.Test;
-import org.knowm.xchart.BitmapEncoder;
-import org.knowm.xchart.QuickChart;
-import org.knowm.xchart.XYChart;
+import org.knowm.xchart.*;
+import org.knowm.xchart.internal.chartpart.Chart;
 
 public class SimplestExampleTest {
 
   static final String digestType = "md5";
+
+  Font font;
+
+  {
+    try {
+      GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+      font =
+          Font.createFont(
+              Font.TRUETYPE_FONT,
+              new File(getClass().getResource("/font/Barlow-Regular.ttf").getFile()));
+      ge.registerFont(font);
+    } catch (IOException | FontFormatException e) {
+      throw new RuntimeException("Failed to load the font file for tests", e);
+    }
+  }
 
   @Test
   public void testSimplestExampleStaysTheSame() throws Exception {
@@ -24,33 +39,30 @@ public class SimplestExampleTest {
 
     // when
     XYChart chart = QuickChart.getChart("Sample Chart", "X", "Y", "y(x)", xData, yData);
-    chart.getStyler().setChartTitleFont(arial());
-    chart.getStyler().setAxisTickLabelsFont(arial());
-    chart.getStyler().setLegendFont(arial());
-    chart.getStyler().setAxisTitleFont(arial());
-    DigestOutputStream output =
-        new DigestOutputStream(new ByteArrayOutputStream(), MessageDigest.getInstance(digestType));
-    BitmapEncoder.saveBitmap(chart, output, BitmapEncoder.BitmapFormat.PNG);
-    output.close();
+    chart.getStyler().setChartTitleFont(fontToBeUsed());
+    chart.getStyler().setAxisTickLabelsFont(fontToBeUsed());
+    chart.getStyler().setLegendFont(fontToBeUsed());
+    chart.getStyler().setAxisTitleFont(fontToBeUsed());
 
     // test
-    assertImagesEquals("simplestExample.png", output);
+    assertImagesEquals("simplestExample.png", chart);
   }
 
-  private Font arial() {
-    return new Font("Arial", Font.PLAIN, 14);
+  private Font fontToBeUsed() {
+    return new Font("Barlow", Font.PLAIN, 12);
   }
 
-  public void assertImagesEquals(String expectedFileName, DigestOutputStream actual)
-      throws Exception {
-    String path =
-        "/expectedChartRenderings/"
-            + System.getProperty("os.name").replaceAll(" ", "")
-            + "/"
-            + expectedFileName;
-    byte[] expectedBytes = Files.readAllBytes(Paths.get(getClass().getResource(path).toURI()));
-    byte[] expectedDigest = MessageDigest.getInstance(digestType).digest(expectedBytes);
+  public void assertImagesEquals(String expectedFileName, Chart chart) throws Exception {
+    String path = "/expectedChartRenderings/" + expectedFileName;
+    File actualFile = new File(getClass().getResource(path).getFile());
+    BufferedImage expectedImage = ImageIO.read(actualFile);
 
-    Assert.assertArrayEquals(expectedDigest, actual.getMessageDigest().digest());
+    BufferedImage actualImage = BitmapEncoder.getBufferedImage(chart);
+    ImageComparison compare = new ImageComparison(expectedImage, actualImage);
+    compare.setPixelToleranceLevel(0);
+    compare.setThreshold(0);
+    if (compare.compareImages().getImageComparisonState() != ImageComparisonState.MATCH) {
+      Assert.fail("Rendered chart is different than expected");
+    }
   }
 }
